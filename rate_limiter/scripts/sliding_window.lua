@@ -64,11 +64,10 @@ end
 
 local new_count = redis.call("INCR", current_key)
 
--- TTL safety net: even if a client goes permanently silent, keys expire
--- instead of leaking memory forever. 2x window is generous headroom.
 redis.call("PEXPIRE", current_key, window_ms * 2)
 redis.call("PEXPIRE", previous_key, window_ms * 2)
 redis.call("PEXPIRE", current_key .. ":slot", window_ms * 2)
 
-local remaining = math.max(0, limit - math.floor(current_count + previous_count * overlap_ratio))
+-- FIXED: use new_count (post-increment), not the stale pre-increment current_count
+local remaining = math.max(0, limit - math.floor(new_count + previous_count * overlap_ratio))
 return { 1, remaining, 0 }

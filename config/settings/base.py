@@ -4,7 +4,7 @@ Environment-specific overrides live in dev.py / prod.py.
 """
 from pathlib import Path
 from decouple import config, Csv
-
+from celery.schedules import crontab
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 SECRET_KEY = config("DJANGO_SECRET_KEY")
@@ -130,5 +130,14 @@ LOGGING = {
     "loggers": {
         "rate_limiter": {"handlers": ["console"], "level": "DEBUG", "propagate": False},
         "analytics": {"handlers": ["console"], "level": "INFO", "propagate": False},
+    },
+}
+
+
+
+CELERY_BEAT_SCHEDULE = {
+    "rollup-usage-aggregates-hourly": {
+        "task": "analytics.rollup_usage_aggregates",
+        "schedule": crontab(minute=5),  # 5 minutes past every hour — lets the previous hour's writes settle
     },
 }

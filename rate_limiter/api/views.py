@@ -15,7 +15,7 @@ from rate_limiter.api.serializers import (
 )
 from rate_limiter.exceptions import ClientNotFoundError, LimitConfigNotFoundError
 from rate_limiter.services.rate_limit_service import rate_limit_service
-from rate_limiter.tasks import log_rate_limit_request  # added in Phase 4
+from analytics.tasks import log_rate_limit_request  # added in Phase 4
 
 logger = logging.getLogger("rate_limiter")
 

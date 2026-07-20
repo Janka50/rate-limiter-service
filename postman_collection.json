@@ -1,0 +1,62 @@
+{
+  "info": {
+    "name": "Global Rate Limiter Service",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Check Rate Limit - Allowed",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "http://localhost:8000/api/v1/check/", "host": ["localhost:8000"], "path": ["api", "v1", "check"] },
+        "body": { "mode": "raw", "raw": "{\"client_id\": \"load-test-client\", \"resource\": \"load-test-resource\"}" }
+      }
+    },
+    {
+      "name": "Check Rate Limit - Unknown Client",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "http://localhost:8000/api/v1/check/", "host": ["localhost:8000"], "path": ["api", "v1", "check"] },
+        "body": { "mode": "raw", "raw": "{\"client_id\": \"ghost-client\", \"resource\": \"r1\"}" }
+      }
+    },
+    {
+      "name": "Usage Trend",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "http://localhost:8000/api/v1/analytics/trend/?client_id=load-test-client&resource=load-test-resource&hours=24",
+          "host": ["localhost:8000"], "path": ["api", "v1", "analytics", "trend"],
+          "query": [
+            { "key": "client_id", "value": "load-test-client" },
+            { "key": "resource", "value": "load-test-resource" },
+            { "key": "hours", "value": "24" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Client Summary",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "http://localhost:8000/api/v1/analytics/summary/?client_id=load-test-client&hours=24",
+          "host": ["localhost:8000"], "path": ["api", "v1", "analytics", "summary"],
+          "query": [
+            { "key": "client_id", "value": "load-test-client" },
+            { "key": "hours", "value": "24" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "OpenAPI Docs (Swagger UI)",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "http://localhost:8000/api/docs/", "host": ["localhost:8000"], "path": ["api", "docs"] }
+      }
+    }
+  ]
+}
