@@ -1,4 +1,4 @@
-version: "3.9"
+
 
 services:
   db:
@@ -29,7 +29,8 @@ services:
 
   web:
     build: .
-    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3
+     # docker-compose.yml, web service command
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --worker-class gthread --threads 4 --timeout 30
     env_file: .env
     volumes:
       - .:/app

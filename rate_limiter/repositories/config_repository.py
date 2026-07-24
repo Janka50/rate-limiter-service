@@ -1,12 +1,16 @@
 """
 Repository for client/limit configuration. Reads are cache-first (Redis,
 via Django's cache framework) with Postgres as the fallback and source of
-truth — this keeps the hot path off Postgres entirely under normal operation.
+truth. If the Redis cache itself is unreachable, that failure must not
+propagate — a cache is optional infrastructure by definition, so any
+Redis error here is treated as a cache miss and we fall through to
+Postgres directly. (Caught by manual fail-safe verification — see notes.)
 """
 import logging
 
 from django.core.cache import cache
 from django.conf import settings
+from redis.exceptions import RedisError
 
 from rate_limiter.domain.entities import LimitConfig
 from rate_limiter.exceptions import ClientNotFoundError, LimitConfigNotFoundError
@@ -18,9 +22,27 @@ _CACHE_KEY_TEMPLATE = "rl_config:{client_id}:{resource}"
 
 
 class ConfigRepository:
+    def _safe_cache_get(self, cache_key: str):
+        """Cache reads must never be able to crash the request. Any error
+        talking to the cache backend is treated as a miss."""
+        try:
+            return cache.get(cache_key)
+        except RedisError as exc:
+            logger.warning("Cache unavailable during config lookup (%s) — falling back to Postgres", exc)
+            return None
+
+    def _safe_cache_set(self, cache_key: str, value, timeout: int) -> None:
+        """Cache writes must never be able to crash the request either —
+        if we can't warm the cache, the next request just falls back to
+        Postgres again, which is correct, just slightly slower."""
+        try:
+            cache.set(cache_key, value, timeout=timeout)
+        except RedisError as exc:
+            logger.warning("Could not write config to cache (%s) — continuing without cache", exc)
+
     def get_limit_config(self, client_id: str, resource: str) -> LimitConfig:
         cache_key = _CACHE_KEY_TEMPLATE.format(client_id=client_id, resource=resource)
-        cached = cache.get(cache_key)
+        cached = self._safe_cache_get(cache_key)
         if cached is not None:
             return cached
 
@@ -43,16 +65,12 @@ class ConfigRepository:
             window_seconds=config_row.window_seconds,
             strategy=config_row.strategy,
         )
-        cache.set(cache_key, limit_config, timeout=settings.CONFIG_CACHE_TTL_SECONDS)
+        self._safe_cache_set(cache_key, limit_config, timeout=settings.CONFIG_CACHE_TTL_SECONDS)
         return limit_config
 
     def get_fail_policy(self, client_id: str) -> str:
-        """
-        Separate cached lookup so a Postgres outage doesn't take down fail-policy
-        resolution either — falls back to the global default from settings.
-        """
         cache_key = f"rl_fail_policy:{client_id}"
-        cached = cache.get(cache_key)
+        cached = self._safe_cache_get(cache_key)
         if cached is not None:
             return cached
         try:
@@ -60,7 +78,7 @@ class ConfigRepository:
             policy = client.fail_policy
         except Client.DoesNotExist:
             policy = settings.DEFAULT_FAIL_POLICY
-        cache.set(cache_key, policy, timeout=settings.CONFIG_CACHE_TTL_SECONDS)
+        self._safe_cache_set(cache_key, policy, timeout=settings.CONFIG_CACHE_TTL_SECONDS)
         return policy
 
 

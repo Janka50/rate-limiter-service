@@ -2,6 +2,9 @@ import pytest
 
 from rate_limiter.exceptions import ClientNotFoundError, LimitConfigNotFoundError
 from rate_limiter.repositories.config_repository import ConfigRepository
+ 
+from unittest.mock import patch
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 
 def test_unknown_client_raises(db):
@@ -23,3 +26,13 @@ def test_config_is_cached_after_first_lookup(db, test_client_config):
     # by confirming identical values without deleting the DB row in between.
     second = repo.get_limit_config("test-client", "test-resource")
     assert first == second
+    
+    
+
+
+def test_cache_read_failure_falls_back_to_postgres_not_crash(db, test_client_config):
+    repo = ConfigRepository()
+    with patch("rate_limiter.repositories.config_repository.cache.get",
+               side_effect=RedisConnectionError("simulated redis outage")):
+        config = repo.get_limit_config("test-client", "test-resource")
+    assert config.limit == 5  # proves it fell through to Postgres, not crashed

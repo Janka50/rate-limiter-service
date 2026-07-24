@@ -74,15 +74,17 @@ REDIS_PORT = config("REDIS_PORT", cast=int)
 REDIS_DB = config("REDIS_DB", default=0, cast=int)
 REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
 
+# config/settings/base.py
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
         "LOCATION": REDIS_URL,
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            "SOCKET_CONNECT_TIMEOUT": 1,   # fail fast, don't hang the request thread
+            "SOCKET_CONNECT_TIMEOUT": 1,
             "SOCKET_TIMEOUT": 1,
-            "CONNECTION_POOL_KWARGS": {"max_connections": 50},
+            "CONNECTION_POOL_CLASS": "redis.connection.BlockingConnectionPool",
+            "CONNECTION_POOL_CLASS_KWARGS": {"max_connections": 100, "timeout": 2},
         },
     }
 }
@@ -96,7 +98,7 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TASK_ACKS_LATE = True          # don't lose a log task if worker dies mid-processing
 CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
-
+CELERY_TASK_IGNORE_RESULT = True
 # --- Rate limiter policy ---------------------------------------------
 DEFAULT_FAIL_POLICY = config("DEFAULT_FAIL_POLICY", default="FAIL_OPEN")
 CONFIG_CACHE_TTL_SECONDS = config("CONFIG_CACHE_TTL_SECONDS", default=30, cast=int)

@@ -48,13 +48,23 @@ class RateLimitCheckView(APIView):
             )
 
         # Fire-and-forget async log — never blocks this response (Phase 4 wires the task body).
-        log_rate_limit_request.delay(
-            client_id=client_id,
-            resource=resource,
-            allowed=decision.allowed,
-            remaining=decision.remaining,
-            degraded=decision.degraded,
-        )
+        # Fire-and-forget async log — never blocks this response. Wrapped in
+        # try/except because this call itself can raise if the broker
+        # (Redis) is unreachable — logging failures must never break the
+        # rate-limit decision response.
+        try:
+            log_rate_limit_request.delay(
+                client_id=client_id,
+                resource=resource,
+                allowed=decision.allowed,
+                remaining=decision.remaining,
+                degraded=decision.degraded,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to enqueue analytics log for client=%s resource=%s — continuing without it",
+                client_id, resource,
+            )
 
         response_data = RateLimitCheckResponseSerializer(instance={
             "allowed": decision.allowed,
