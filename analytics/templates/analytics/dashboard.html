@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rate Limiter — Signal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #F1F3EC;
+    --grid-line: #DADFD1;
+    --ink: #1C2B33;
+    --ink-soft: #5B6B70;
+    --signal: #1F8A70;
+    --reject: #B23A2E;
+    --degraded: #C89B3C;
+    --card-bg: #FAFBF7;
+    --border: #C7CDBC;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background:
+      linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0 / 100% 28px,
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) 0 0 / 28px 100%,
+      var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-height: 100vh;
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 28px 24px 64px;
+  }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .brand {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  h1 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    font-size: 22px;
+    margin: 2px 0 0;
+    letter-spacing: -0.01em;
+  }
+
+  .clock {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+
+  /* --- pulse strip: the signature element --- */
+  .pulse-panel {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 14px 18px 10px;
+    margin-bottom: 22px;
+  }
+
+  .pulse-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+
+  .pulse-strip {
+    height: 56px;
+    width: 100%;
+    display: block;
+  }
+
+  .legend {
+    display: flex;
+    gap: 18px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot.signal { background: var(--signal); }
+  .dot.reject { background: var(--reject); }
+
+  /* --- controls --- */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+    margin-bottom: 22px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 14px 16px;
+  }
+
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .field input, .field select {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    background: #fff;
+    color: var(--ink);
+    min-width: 150px;
+  }
+  .field input:focus, .field select:focus, button:focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: 1px;
+  }
+
+  button.go {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    border-radius: 2px;
+    padding: 9px 18px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  button.go:hover { background: #33484f; }
+
+  .status-line {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-left: auto;
+  }
+  .status-line.err { color: var(--reject); }
+
+  /* --- stat cards --- */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+
+  .stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--ink);
+    border-radius: 3px;
+    padding: 14px 16px;
+  }
+  .stat-card.total { border-left-color: var(--ink); }
+  .stat-card.allowed { border-left-color: var(--signal); }
+  .stat-card.rejected { border-left-color: var(--reject); }
+  .stat-card.degraded { border-left-color: var(--degraded); }
+
+  .stat-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+  }
+  .stat-value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  /* --- trend chart --- */
+  .trend-panel {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 16px 18px;
+    margin-bottom: 22px;
+  }
+  .panel-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 10px;
+  }
+  #trendChart { width: 100%; height: 220px; display: block; }
+
+  .empty-note {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+    text-align: center;
+    padding: 30px 10px;
+  }
+
+  footer {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+    text-align: center;
+    margin-top: 30px;
+  }
+
+  @media (max-width: 720px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .status-line { margin-left: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="brand">rate limiter // observability</div>
+      <h1>Signal</h1>
+    </div>
+    <div class="clock" id="clock"></div>
+  </header>
+
+  <div class="pulse-panel">
+    <div class="pulse-label">
+      <span>Traffic (last 24h, hourly)</span>
+      <span id="pulseRange">—</span>
+    </div>
+    <svg id="pulseStrip" class="pulse-strip" viewBox="0 0 600 56" preserveAspectRatio="none"></svg>
+    <div class="legend">
+      <span><i class="dot signal"></i> allowed</span>
+      <span><i class="dot reject"></i> rejected</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="field">
+      <label for="clientId">Client ID</label>
+      <input id="clientId" type="text" value="demo-client" placeholder="e.g. demo-client">
+    </div>
+    <div class="field">
+      <label for="resource">Resource</label>
+      <input id="resource" type="text" value="demo-resource" placeholder="e.g. demo-resource">
+    </div>
+    <div class="field">
+      <label for="hours">Window</label>
+      <select id="hours">
+        <option value="6">6 hours</option>
+        <option value="24" selected>24 hours</option>
+        <option value="72">3 days</option>
+        <option value="168">7 days</option>
+      </select>
+    </div>
+    <button class="go" id="loadBtn">Load</button>
+    <span class="status-line" id="statusLine">idle</span>
+  </div>
+
+  <div class="stats">
+    <div class="stat-card total">
+      <div class="stat-label">Total requests</div>
+      <div class="stat-value" id="statTotal">—</div>
+    </div>
+    <div class="stat-card allowed">
+      <div class="stat-label">Allowed</div>
+      <div class="stat-value" id="statAllowed">—</div>
+    </div>
+    <div class="stat-card rejected">
+      <div class="stat-label">Rejected</div>
+      <div class="stat-value" id="statRejected">—</div>
+    </div>
+    <div class="stat-card degraded">
+      <div class="stat-label">Degraded (fail-safe)</div>
+      <div class="stat-value" id="statDegraded">—</div>
+    </div>
+  </div>
+
+  <div class="trend-panel">
+    <div class="panel-title">Requests per hour</div>
+    <svg id="trendChart" viewBox="0 0 1000 220" preserveAspectRatio="none"></svg>
+    <div class="empty-note" id="emptyNote" style="display:none;">
+      No aggregate data for this window yet — the hourly rollup runs at 5 minutes past the hour.
+      Trigger it manually with <code>rollup_usage_aggregates()</code> if you want to see data immediately.
+    </div>
+  </div>
+
+  <footer>data via /api/v1/analytics/ · same-origin, no auth</footer>
+</div>
+
+<script>
+const SVGNS = "http://www.w3.org/2000/svg";
+
+function clockTick() {
+  const el = document.getElementById('clock');
+  const now = new Date();
+  el.textContent = now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+}
+clockTick();
+setInterval(clockTick, 1000);
+
+function setStatus(msg, isErr) {
+  const el = document.getElementById('statusLine');
+  el.textContent = msg;
+  el.className = 'status-line' + (isErr ? ' err' : '');
+}
+
+function el(tag, attrs) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
+function drawPulse(points) {
+  const svg = document.getElementById('pulseStrip');
+  svg.innerHTML = '';
+  if (!points.length) return;
+  const w = 600, h = 56, pad = 4;
+  const maxVal = Math.max(1, ...points.map(p => p.total));
+  const stepX = (w - pad * 2) / Math.max(1, points.length - 1);
+
+  const pathFor = (key, color) => {
+    let d = '';
+    points.forEach((p, i) => {
+      const x = pad + i * stepX;
+      const y = h - pad - ((p[key] || 0) / maxVal) * (h - pad * 2);
+      d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1) + ' ';
+    });
+    svg.appendChild(el('path', { d, fill: 'none', stroke: color, 'stroke-width': 1.6, 'stroke-linejoin': 'round' }));
+  };
+
+  pathFor('allowed', '#1F8A70');
+  pathFor('rejected', '#B23A2E');
+}
+
+function drawTrend(points) {
+  const svg = document.getElementById('trendChart');
+  const emptyNote = document.getElementById('emptyNote');
+  svg.innerHTML = '';
+
+  if (!points.length) {
+    emptyNote.style.display = 'block';
+    return;
+  }
+  emptyNote.style.display = 'none';
+
+  const w = 1000, h = 220, padL = 40, padR = 10, padT = 10, padB = 26;
+  const innerW = w - padL - padR, innerH = h - padT - padB;
+  const maxVal = Math.max(1, ...points.map(p => p.total_requests));
+  const stepX = points.length > 1 ? innerW / (points.length - 1) : 0;
+
+  // gridlines
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + (innerH / 4) * i;
+    svg.appendChild(el('line', { x1: padL, x2: w - padR, y1: y, y2: y, stroke: '#DADFD1', 'stroke-width': 1 }));
+    const val = Math.round(maxVal - (maxVal / 4) * i);
+    const label = el('text', { x: 6, y: y + 4, 'font-family': 'IBM Plex Mono, monospace', 'font-size': 10, fill: '#5B6B70' });
+    label.textContent = val;
+    svg.appendChild(label);
+  }
+
+  const pathFor = (key, color) => {
+    let d = '';
+    points.forEach((p, i) => {
+      const x = padL + i * stepX;
+      const y = padT + innerH - ((p[key] || 0) / maxVal) * innerH;
+      d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1) + ' ';
+    });
+    svg.appendChild(el('path', { d, fill: 'none', stroke: color, 'stroke-width': 2 }));
+  };
+
+  pathFor('allowed_requests', '#1F8A70');
+  pathFor('rejected_requests', '#B23A2E');
+
+  // x labels: first, middle, last
+  [0, Math.floor(points.length / 2), points.length - 1].forEach(i => {
+    if (i < 0 || i >= points.length) return;
+    const x = padL + i * stepX;
+    const t = new Date(points[i].bucket_start);
+    const label = el('text', {
+      x, y: h - 6, 'font-family': 'IBM Plex Mono, monospace', 'font-size': 10,
+      fill: '#5B6B70', 'text-anchor': i === 0 ? 'start' : (i === points.length - 1 ? 'end' : 'middle')
+    });
+    label.textContent = t.toISOString().slice(5, 16).replace('T', ' ');
+    svg.appendChild(label);
+  });
+}
+
+async function loadDashboard() {
+  const clientId = document.getElementById('clientId').value.trim();
+  const resource = document.getElementById('resource').value.trim();
+  const hours = document.getElementById('hours').value;
+
+  if (!clientId || !resource) {
+    setStatus('client id and resource are required', true);
+    return;
+  }
+
+  setStatus('loading…');
+
+  try {
+    const [trendRes, summaryRes] = await Promise.all([
+      fetch(`/api/v1/analytics/trend/?client_id=${encodeURIComponent(clientId)}&resource=${encodeURIComponent(resource)}&hours=${hours}`),
+      fetch(`/api/v1/analytics/summary/?client_id=${encodeURIComponent(clientId)}&hours=${hours}`)
+    ]);
+
+    if (!trendRes.ok) throw new Error(`trend endpoint returned ${trendRes.status}`);
+    if (!summaryRes.ok) throw new Error(`summary endpoint returned ${summaryRes.status}`);
+
+    const trend = await trendRes.json();
+    const summary = await summaryRes.json();
+
+    document.getElementById('statTotal').textContent = summary.total ?? 0;
+    document.getElementById('statAllowed').textContent = summary.allowed ?? 0;
+    document.getElementById('statRejected').textContent = summary.rejected ?? 0;
+    document.getElementById('statDegraded').textContent = summary.degraded ?? 0;
+
+    const pulsePoints = trend.map(p => ({
+      allowed: p.allowed_requests, rejected: p.rejected_requests, total: p.total_requests
+    }));
+    drawPulse(pulsePoints);
+    drawTrend(trend);
+
+    document.getElementById('pulseRange').textContent = trend.length
+      ? `${trend.length} buckets`
+      : 'no data';
+
+    setStatus(`updated ${new Date().toLocaleTimeString()}`, false);
+  } catch (err) {
+    setStatus(err.message, true);
+  }
+}
+
+document.getElementById('loadBtn').addEventListener('click', loadDashboard);
+document.getElementById('clientId').addEventListener('keydown', e => { if (e.key === 'Enter') loadDashboard(); });
+document.getElementById('resource').addEventListener('keydown', e => { if (e.key === 'Enter') loadDashboard(); });
+
+// auto-load on first paint
+loadDashboard();
+</script>
+</body>
+</html>
+

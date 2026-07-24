@@ -17,11 +17,12 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
-
+from django.views.generic import TemplateView
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/v1/", include("rate_limiter.api.urls")),   # added Phase 3
     path("api/v1/analytics/", include("analytics.api.urls")),  # added Phase 4
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema")),
+    path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
+    path("dashboard/", TemplateView.as_view(template_name="analytics/dashboard.html"), name="dashboard")  
 ]
